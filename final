@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+
+
+import argparse
+import biotools as bt
+
+#set-up open source file
+parser = argparse.ArgumentParser(
+	description='Prokaryotic gene finder.')
+parser.add_argument('--file', required=True, type=str,
+	metavar='<str>', help='FASTA file')
+#sets minimum open reading frame in terminal
+parser.add_argument('--minorf', required=False, type=int, default=100,
+	metavar='<int>', help='minimum open reading frame length [%(default)i]')
+
+arg = parser.parse_args()
+
+gcode = {
+	'AAA' : 'K',	'AAC' : 'N',	'AAG' : 'K',	'AAT' : 'N',
+	'ACA' : 'T',	'ACC' : 'T',	'ACG' : 'T',	'ACT' : 'T',
+	'AGA' : 'R',	'AGC' : 'S',	'AGG' : 'R',	'AGT' : 'S',
+	'ATA' : 'I',	'ATC' : 'I',	'ATG' : 'M',	'ATT' : 'I',
+	'CAA' : 'Q',	'CAC' : 'H',	'CAG' : 'Q',	'CAT' : 'H',
+	'CCA' : 'P',	'CCC' : 'P',	'CCG' : 'P',	'CCT' : 'P',
+	'CGA' : 'R',	'CGC' : 'R',	'CGG' : 'R',	'CGT' : 'R',
+	'CTA' : 'L',	'CTC' : 'L',	'CTG' : 'L',	'CTT' : 'L',
+	'GAA' : 'E',	'GAC' : 'D',	'GAG' : 'E',	'GAT' : 'D',
+	'GCA' : 'A',	'GCC' : 'A',	'GCG' : 'A',	'GCT' : 'A',
+	'GGA' : 'G',	'GGC' : 'G',	'GGG' : 'G',	'GGT' : 'G',
+	'GTA' : 'V',	'GTC' : 'V',	'GTG' : 'V',	'GTT' : 'V',
+	'TAA' : '*',	'TAC' : 'Y',	'TAG' : '*',	'TAT' : 'Y',
+	'TCA' : 'S',	'TCC' : 'S',	'TCG' : 'S',	'TCT' : 'S',
+	'TGA' : '*',	'TGC' : 'C',	'TGG' : 'W',	'TGT' : 'C',
+	'TTA' : 'L',	'TTC' : 'F',	'TTG' : 'L',	'TTT' : 'F',
+}
+
+def anti(seq):
+	forward = 'ACGTRYMKWSBDHV'
+	reverse = 'TGCAYRKMWSVHBD'
+	table = seq.maketrans(forward, reverse)
+	return seq.translate(table)[::-1]
+
+posn = 0
+negn = 0
+n = 0
+coding = 0
+#for loop using read fasta function to read through arg file
+for name, seq in bt.read_fasta(arg.file):
+    #for loop sets of 3 frames to find possibly overlapping genes
+    for a in range(0, 3):
+        #positive and negative strands of dna set up to be read in the three frames. Negative strand using the antiseq function
+        posdna =  seq[a:]
+        negdna = anti(seq[:len(seq)-a])
+        #print('debug', dna)
+        b = 0
+        #while loop to start reading through the dna seq in the three frames
+        while b < len(posdna):
+            poscodon = posdna[b:b+3]
+            #if loop identifying each ATG in the sequence, once found the inner loops begins making codons and reading in triplets until stop codon found in that reading frame
+            if poscodon == 'ATG':
+                for c in range(b, len(posdna)-2, 3):
+                    poscodon = posdna[c:c+3]
+                    if poscodon == 'TAA' or poscodon == 'TGA' or poscodon == 'TAG':
+                        posorf = posdna[b:c+3]
+                        posgene = ""
+                        #once gene is found, start to end, it is translated from nucleotides to amino acids using gcode dictionary
+                        for d in range(0, len(posorf), 3):
+                            poscodon = posorf[d:d+3]
+                            posgene = posgene + gcode[poscodon]
+                        #if the translated amino acide sequence is less than the set minorf then it will not be printed
+                        if arg.minorf < len(posgene):
+                            print(f'>posgene-{n}')
+                            print(posgene)
+                            #ending with counts to count the number of coding seqs, number of total genes, and number of positive genes
+                            coding += c - b
+                            n += 1
+                            posn += 1
+                            b = c
+                        #once gene found, loop breaks
+                        break
+            b += 3
+        f =0
+        #same as above, procedure repeated for the negative strand
+        while f < len(negdna):
+            negcodon = negdna[f:f+3]
+            if negcodon == 'ATG':
+                for g in range(f, len(negdna)-2, 3):
+                    negcodon = negdna[g:g+3]
+                    if negcodon == 'TAA' or negcodon == 'TGA' or negcodon == 'TAG':
+                        negorf = negdna[f:g+3]
+                        neggene = ""
+                        for h in range(0, len(negorf), 3):
+                            negcodon = negorf[h:h+3]
+                            neggene = neggene + gcode[negcodon]
+                        if arg.minorf < len(neggene):
+                            print(f'>neggene-{n}')
+                            print(neggene)
+                            coding += g - f
+                            n += 1
+                            negn += 1
+                            f = g
+                        break
+            f += 3
+
+print('Gene Report')
+print('Name of Genome:', name)
+print('Size of Genome in bp:', len(seq))
+print('Number of Genes:', n)
+print('Number of Genes on the Positive Strand:', posn)
+print('Number of Genes on the Negative Strand:', negn)
+print('Percentage of Genome Coding:', (coding/(2 * len(seq))) *100)
+
+
+
